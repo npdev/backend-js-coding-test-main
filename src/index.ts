@@ -1,20 +1,17 @@
 import express, { Request, Response } from 'express';
-import {getFiles, getCompanies} from './company';
+import {getCompanies, filterCompanies} from './company';
+import {Filter} from './types';
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-const companiesDataPath = './data/companies';
 
 /*
 Endpoint to get company by id
 */
 app.get('/companies/:id', (req: Request, res: Response) => {
   const companyId = req.params.id;
-  // getting array of files paths
-  const files = getFiles(companiesDataPath);
   // reading files to get company data by id
-  let company = getCompanies(files, companyId)[0];
+  let company = getCompanies(companyId)[0];
   // if company exists return company data and status
   if (company) {
     return res.status(200).json({
@@ -31,16 +28,18 @@ app.get('/companies/:id', (req: Request, res: Response) => {
 
 /*
 Endpoint to get all companies
-Query: sort, limit, offset
-Example: http://localhost:3000/companies?sort=asc&limit=5&offset=2
+Query: sort, limit, offset, filter
+Example: http://localhost:3000/companies?sort=asc&limit=5&offset=0&filter[active]=true&filter[cn]="Gorczany, Dibbert and Goodwin"&filter[en]="Dar"
 Returns array of companies data and pagination metadata
 */
 app.get('/companies', (req: Request, res: Response) => {
-  const query = req.query;  
-  // getting array of files paths
-  const files = getFiles(companiesDataPath);
+  const query = req.query;
   // reading files to get array of companies data
-  let companies = getCompanies(files);
+  let companies = getCompanies();
+  // applying filters
+  if (query.filter) {
+    companies = filterCompanies(companies, query.filter as Filter);
+  }
   // if sort is provided - sort data accordingly
   if (query?.sort === 'desc') {
     companies = companies.sort((a, b) => b.id - a.id);
@@ -52,12 +51,19 @@ app.get('/companies', (req: Request, res: Response) => {
   // get 'page' of companies data accordingly to offset and limit
   companies = companies.slice(offset * limit, offset * limit + limit);
   // Return array of companies data and pagination metadata
-  res.status(200).json({
-    data: companies,
-    limit,
-    offset
-  });
-  });
+  if (companies.length > 0) {
+    return res.status(200).json({
+      data: companies,
+      limit,
+      offset
+    });
+  } else { // if companies weren't found return status and message about it
+    return res.status(404).json({
+      status: 404,
+      message: `No companies with given params`
+    });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
